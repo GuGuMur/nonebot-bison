@@ -9,7 +9,7 @@ from bs4 import BeautifulSoup as bs
 from ..post import Post
 from .platform import NewMessage
 from ..types import Target, RawPost
-from ..utils import Site, text_similarity
+from ..utils import Site, cleantext, text_similarity
 
 
 class RssSite(Site):
@@ -65,8 +65,8 @@ class Rss(NewMessage):
     async def parse(self, raw_post: RawPost) -> Post:
         title = raw_post.get("title", "")
         soup = bs(raw_post.description, "html.parser")
-        desc = soup.text.strip()
-        title, desc = self._text_process(title, desc)
+        desc = raw_post.description
+        title, desc = self._text_process(title, plain_content_handler(desc))
         pics = [x.attrs["src"] for x in soup("img")]
         if raw_post.get("media_content"):
             for media in raw_post["media_content"]:
@@ -80,3 +80,19 @@ class Rss(NewMessage):
             images=pics,
             nickname=raw_post["_target_name"],
         )
+
+
+@Post.register_plain_content_handler("rss")
+def plain_content_handler(content: str) -> str:
+    soup = bs(content, "html.parser")
+
+    for br in soup.find_all("br"):
+        br.replace_with("\n")
+
+    for p in soup.find_all("p"):
+        p.insert_after("\n")
+
+    for a in soup.find_all("a"):
+        a.insert_after(f"({a.get('href')})")
+
+    return cleantext(soup.get_text())
